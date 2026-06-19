@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 ```bash
 cd backend
 python -m venv venv
@@ -21,3 +22,6 @@ python main.py
    ```bash
    streamlit run streamlit_app.py
    ```
+=======
+# Local-rag
+>>>>>>> dcb2e6b5bfad9bc359f098af1f942550b31de004
