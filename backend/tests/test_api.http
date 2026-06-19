@@ -1,0 +1,72 @@
+### RAG Chatbot v2 - Test API
+### Dùng VS Code extension "REST Client" hoặc httpie
+@base = http://localhost:8000/api
+
+# ─── 1. HEALTH CHECK ───────────────────────────────────────────
+
+### Kiểm tra server & Gemini key
+GET {{base}}/health
+
+###
+
+# ─── 2. DOCUMENTS ──────────────────────────────────────────────
+
+### Danh sách tài liệu
+GET {{base}}/documents
+
+### Thống kê vector DB
+GET {{base}}/stats
+
+### Xóa tài liệu
+# DELETE {{base}}/documents/ten_file.pdf
+
+# ─── 3. CHAT (Gemini) ──────────────────────────────────────────
+
+### Chat mới (tạo conversation tự động)
+POST {{base}}/chat
+Content-Type: application/json
+
+{
+  "query": "Xin chào! Bạn có thể làm gì?"
+}
+
+### Chat tiếp trong conversation cũ
+POST {{base}}/chat
+Content-Type: application/json
+
+{
+  "query": "Tóm tắt nội dung tài liệu",
+  "conversation_id": "REPLACE_WITH_REAL_CONV_ID"
+}
+
+### Chat với tùy chỉnh retrieval
+POST {{base}}/chat
+Content-Type: application/json
+
+{
+  "query": "Giải thích chi tiết về RAG pipeline",
+  "top_k": 8,
+  "threshold": 0.2
+}
+
+# ─── 4. LỊCH SỬ CHAT ───────────────────────────────────────────
+
+### Danh sách conversations
+GET {{base}}/conversations
+
+### Tạo conversation mới
+POST {{base}}/conversations?title=Nghiên%20cứu%20AI
+
+### Tin nhắn trong conversation
+GET {{base}}/conversations/REPLACE_WITH_REAL_CONV_ID/messages
+
+### Đổi tên
+PATCH {{base}}/conversations/REPLACE_WITH_REAL_CONV_ID/title
+Content-Type: application/json
+
+{
+  "title": "Tên mới"
+}
+
+### Xóa conversation
+# DELETE {{base}}/conversations/REPLACE_WITH_REAL_CONV_ID

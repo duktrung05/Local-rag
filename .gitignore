@@ -1,0 +1,31 @@
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+
+# Môi trường ảo (Đã có requirements.txt nên không cần đẩy venv)
+venv/
+.venv/
+env/
+
+# Cấu hình bảo mật và Log (Tuyệt đối không đẩy API Key)
+.env
+*.log
+
+# Dữ liệu nặng / Database cục bộ
+backend/data/chroma_db/
+data/chroma_db/
+*.db
+*.sqlite3
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Streamlit cache
+.streamlit/secrets.toml

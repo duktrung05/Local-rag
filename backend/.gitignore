@@ -1,0 +1,11 @@
+.env
+__pycache__/
+*.py[cod]
+venv/
+.venv/
+data/chroma_db/
+data/chat_history.db
+data/documents/
+*.log
+app.log
+.DS_Store
