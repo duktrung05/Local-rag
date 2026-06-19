@@ -2,34 +2,6 @@
 
 Chatbot hỏi-đáp dựa trên tài liệu cá nhân, sử dụng kiến trúc **RAG (Retrieval-Augmented Generation)**. Người dùng tải lên tài liệu (PDF, DOCX, TXT, MD, CSV), hệ thống tự động xử lý, lưu trữ vector và trả lời câu hỏi dựa trên nội dung tài liệu đó — kèm trích dẫn nguồn.
 
-## Demo
-
-![RAG Chatbot UI](docs/demo.png)
-*(Giao diện Streamlit kết nối với backend FastAPI)*
-
-## Kiến trúc hệ thống
-
-```
-┌─────────────┐      ┌──────────────┐      ┌─────────────────┐
-│  Streamlit   │ ───> │   FastAPI     │ ───> │   ChromaDB       │
-│  (Frontend)  │ <─── │   (Backend)   │ <─── │ (Vector Store)   │
-└─────────────┘      └──────┬───────┘      └─────────────────┘
-                             │
-                ┌────────────┼────────────┐
-                ▼                          ▼
-        Embedding Model              Groq API
-   (sentence-transformers)      (Llama 3.3 70B)
-```
-
-**Luồng xử lý:**
-1. Người dùng tải tài liệu lên → `document_loader.py` đọc nội dung theo định dạng tương ứng
-2. `text_cleaner.py` làm sạch văn bản → `text_chunker.py` chia thành các đoạn nhỏ (chunk)
-3. `embedding_manager.py` chuyển mỗi chunk thành vector embedding
-4. Vector được lưu vào **ChromaDB** kèm metadata (tên file, vị trí đoạn)
-5. Khi người dùng hỏi, câu hỏi được vector hoá và so khớp ngữ nghĩa với các chunk đã lưu (retrieval)
-6. Các đoạn liên quan nhất được ghép vào prompt, gửi tới LLM (Groq) để sinh câu trả lời
-7. Câu trả lời được stream về frontend theo từng token, kèm nguồn trích dẫn
-
 ## Tech Stack
 
 | Thành phần | Công nghệ |
