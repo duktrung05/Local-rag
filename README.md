@@ -2,26 +2,6 @@
 
 Chatbot hỏi-đáp dựa trên tài liệu cá nhân, sử dụng kiến trúc **RAG (Retrieval-Augmented Generation)**. Người dùng tải lên tài liệu (PDF, DOCX, TXT, MD, CSV), hệ thống tự động xử lý, lưu trữ vector và trả lời câu hỏi dựa trên nội dung tài liệu đó — kèm trích dẫn nguồn.
 
-## Tech Stack
-
-| Thành phần | Công nghệ |
-|---|---|
-| Backend API | FastAPI |
-| Frontend | Streamlit |
-| Vector Database | ChromaDB |
-| Embedding Model | `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2` (chạy local, hỗ trợ tiếng Việt) |
-| LLM | Llama 3.3 70B Versatile (qua Groq API) |
-| Định dạng tài liệu hỗ trợ | PDF, DOCX, TXT, MD, CSV |
-
-## Tính năng chính
-
-- 📄 Tải lên và quản lý nhiều tài liệu, tự động chunking + embedding
-- 💬 Chat đa phiên (lưu nhiều cuộc hội thoại riêng biệt, xem lại lịch sử)
-- ⚡ Trả lời theo dạng streaming (hiển thị từng token như ChatGPT)
-- 🔍 Trích dẫn nguồn rõ ràng — biết câu trả lời lấy từ tài liệu nào
-- 🇻🇳 Hỗ trợ tốt tiếng Việt nhờ embedding model đa ngôn ngữ
-- 🗑️ Quản lý tài liệu: xoá từng tài liệu hoặc toàn bộ lịch sử chat
-
 ## Cài đặt & Chạy
 
 ### Yêu cầu
