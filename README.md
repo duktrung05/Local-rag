@@ -118,13 +118,4 @@ Local-rag/
 └── .env.example
 ```
 
-## Hướng phát triển tiếp theo
 
-- [ ] Thêm rerank sau retrieval để tăng độ chính xác
-- [ ] Hỗ trợ đánh giá chất lượng câu trả lời (RAGAS / human feedback)
-- [ ] Triển khai (deploy) lên cloud (Render/Railway cho backend, Streamlit Cloud cho frontend)
-- [ ] Thêm xác thực người dùng (multi-user)
-
-## License
-
-MIT
