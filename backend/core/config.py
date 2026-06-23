@@ -83,7 +83,7 @@ class Settings(BaseSettings):
     # ── Upload ────────────────────────────────────────────────────
     upload_dir: str = "./data/documents"
     max_file_size: int = 50 * 1024 * 1024
-    allowed_extensions: List[str] = [".pdf", ".txt", ".docx", ".md", ".csv"]
+    allowed_extensions: List[str] = [".pdf", ".txt", ".docx", ".md", ".csv", ".xlsx", ".xls"]
 
     @property
     def origins_list(self) -> List[str]:

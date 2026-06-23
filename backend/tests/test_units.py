@@ -63,6 +63,33 @@ class TestDocumentLoaderAndCleaner:
         assert len(docs) == 2  # 2 rows
         assert "An" in docs[0]["content"]
 
+    def test_load_excel_file(self, tmp_path):
+        import openpyxl
+        from core.document_loader import DocumentLoader
+        f = tmp_path / "test.xlsx"
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Sheet1"
+        ws.append(["name", "age", "city"])
+        ws.append(["An", 25, "Hanoi"])
+        ws.append(["Binh", 30, "HCMC"])
+        wb.save(str(f))
+        
+        loader = DocumentLoader()
+        docs = loader.load_file(str(f))
+        assert len(docs) == 2
+        assert "An" in docs[0]["content"]
+        assert "Hanoi" in docs[0]["content"]
+        assert docs[0]["metadata"]["sheet"] == "Sheet1"
+
+    def test_load_xls_unsupported(self, tmp_path):
+        from core.document_loader import DocumentLoader
+        f = tmp_path / "test.xls"
+        f.write_text("dummy")
+        loader = DocumentLoader()
+        with pytest.raises(ValueError, match="không được openpyxl hỗ trợ"):
+            loader.load_file(str(f))
+
     def test_unsupported_extension_raises(self, tmp_path):
         from core.document_loader import DocumentLoader
         f = tmp_path / "file.xyz"

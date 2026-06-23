@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 class DocumentLoader:
     """Load và làm sạch nội dung tài liệu từ nhiều định dạng"""
     
-    SUPPORTED_EXTENSIONS = {".pdf", ".txt", ".docx", ".md", ".csv"}
+    SUPPORTED_EXTENSIONS = {".pdf", ".txt", ".docx", ".md", ".csv", ".xlsx", ".xls"}
     
     def load_file(self, file_path: str) -> List[Dict[str, Any]]:
         """
@@ -38,6 +38,8 @@ class DocumentLoader:
             ".md": self._load_text,
             ".docx": self._load_docx,
             ".csv": self._load_csv,
+            ".xlsx": self._load_excel,
+            ".xls": self._load_excel,
         }
         
         raw_docs = loaders[ext](str(path))
@@ -97,7 +99,7 @@ class DocumentLoader:
     def _load_text(self, file_path: str) -> List[Dict[str, Any]]:
         """Load file TXT hoặc MD"""
         try:
-            with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+            with open(file_path, "r", encoding="utf-8-sig", errors="ignore") as f:
                 content = f.read()
             
             return [{
@@ -158,5 +160,64 @@ class DocumentLoader:
         except Exception as e:
             logger.error(f"Lỗi load CSV: {e}")
             raise
+    
+    def _load_excel(self, file_path: str) -> List[Dict[str, Any]]:
+        """Load file Excel (.xlsx, .xls)"""
+        try:
+            import openpyxl
+            from pathlib import Path
+            
+            suffix = Path(file_path).suffix.lower()
+            if suffix == ".xls":
+                # openpyxl does not support legacy .xls files
+                raise ValueError(
+                    "Định dạng Excel cũ (.xls) không được openpyxl hỗ trợ trực tiếp. "
+                    "Vui lòng chuyển đổi tệp thành định dạng Excel mới (.xlsx) và thử lại."
+                )
+                
+            wb = openpyxl.load_workbook(file_path, read_only=True, data_only=True)
+            docs = []
+            
+            for sheet_name in wb.sheetnames:
+                sheet = wb[sheet_name]
+                rows = list(sheet.iter_rows(values_only=True))
+                if not rows:
+                    continue
+                
+                # First non-empty row as header
+                header_row_idx = 0
+                while header_row_idx < len(rows) and not any(rows[header_row_idx]):
+                    header_row_idx += 1
+                    
+                if header_row_idx >= len(rows):
+                    continue
+                    
+                headers = [str(h).strip() if h is not None else f"Column_{j+1}" 
+                           for j, h in enumerate(rows[header_row_idx])]
+                
+                for i, row_vals in enumerate(rows[header_row_idx + 1:]):
+                    row_dict = {}
+                    for col_idx, val in enumerate(row_vals):
+                        if val is not None and str(val).strip():
+                            header = headers[col_idx] if col_idx < len(headers) else f"Column_{col_idx+1}"
+                            row_dict[header] = str(val).strip()
+                    
+                    if row_dict:
+                        content = " | ".join([f"{k}: {v}" for k, v in row_dict.items()])
+                        if content.strip():
+                            docs.append({
+                                "content": content,
+                                "metadata": {
+                                    "sheet": sheet_name,
+                                    "row": i + header_row_idx + 2,
+                                    "source": file_path,
+                                    "columns": ", ".join(headers[:20]) # Limit columns metadata size
+                                }
+                            })
+            return docs
+        except Exception as e:
+            logger.error(f"Lỗi load Excel: {e}")
+            raise
+
     
 

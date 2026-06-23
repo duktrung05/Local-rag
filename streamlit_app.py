@@ -2,33 +2,123 @@ import streamlit as st
 import requests
 import json
 import time
- 
+
 st.set_page_config(
-    page_title="RAG Chatbot",
-    page_icon="",
+    page_title="Local RAG Chatbot v2",
+    page_icon="🤖",
     layout="wide",
     initial_sidebar_state="expanded"
-)   
- 
+)
+
 BACKEND_URL = "http://127.0.0.1:8000"
- 
+
+# --- Inject Premium Custom CSS ---
+st.markdown("""
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<style>
+    /* Global Styles */
+    html, body, [class*="css"] {
+        font-family: 'Plus Jakarta Sans', sans-serif;
+    }
+    
+    .stApp {
+        background-color: #fafbfc;
+    }
+
+    /* Headings */
+    h1, h2, h3, h4, h5, h6 {
+        font-family: 'Space Grotesk', sans-serif;
+        font-weight: 600;
+        color: #0f172a;
+    }
+
+    /* Status Badge CSS */
+    .status-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 12px;
+        border-radius: 9999px;
+        font-size: 13px;
+        font-weight: 500;
+        border: 1px solid transparent;
+    }
+    .status-online {
+        background-color: #ecfdf5;
+        color: #065f46;
+        border-color: #a7f3d0;
+    }
+    .status-offline {
+        background-color: #fef2f2;
+        color: #991b1b;
+        border-color: #fca5a5;
+    }
+
+    /* Card Layouts */
+    .premium-card {
+        background: white;
+        border-radius: 12px;
+        padding: 16px 20px;
+        border: 1px solid #e2e8f0;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.02);
+        margin-bottom: 16px;
+        transition: transform 0.2s, box-shadow 0.2s;
+    }
+    
+    .premium-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+    }
+
+    /* Chat bubble enhancements */
+    .chat-bubble-sources {
+        font-size: 12.5px;
+        margin-top: 10px;
+        padding: 10px 14px;
+        background-color: #f8fafc;
+        border-left: 3px solid #3b82f6;
+        border-radius: 4px 12px 12px 4px;
+        color: #475569;
+    }
+
+    /* Clean File management list */
+    .file-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 10px 14px;
+        background-color: #ffffff;
+        border-radius: 8px;
+        border: 1px solid #e2e8f0;
+        margin-bottom: 8px;
+    }
+
+    /* Micro-animations */
+    button {
+        transition: all 0.2s ease-in-out !important;
+    }
+    button:hover {
+        transform: scale(1.02);
+    }
+</style>
+""", unsafe_allow_html=True)
+
+
+# --- Initialize Session States ---
 if "current_conv_id" not in st.session_state:
     st.session_state.current_conv_id = None
-if "current_sources" not in st.session_state:
-    st.session_state.current_sources = []
-if "pending_rerun" not in st.session_state:
-    st.session_state.pending_rerun = False
-# Flag để delay rerun sau khi stream xong
-if "stream_done" not in st.session_state:
-    st.session_state.stream_done = False
- 
-#  Xử lý rerun TRƯỚC khi render UI
-# Nếu stream vừa xong ở lần rerun trước → rerun lần nữa để đồng bộ DB
-if st.session_state.stream_done:
-    st.session_state.stream_done = False
-    st.rerun()
- 
-# --- Helper functions ---
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+if "conversations" not in st.session_state:
+    st.session_state.conversations = []
+if "active_tab" not in st.session_state:
+    st.session_state.active_tab = "chat"
+
+
+# --- Backend Helper Functions ---
 def check_backend_health():
     try:
         response = requests.get(f"{BACKEND_URL}/api/health", timeout=2)
@@ -37,25 +127,28 @@ def check_backend_health():
     except Exception:
         pass
     return False, {}
- 
+
 def get_conversations():
     try:
         response = requests.get(f"{BACKEND_URL}/api/conversations", timeout=2)
         if response.status_code == 200:
-            return response.json()
+            st.session_state.conversations = response.json()
+            return st.session_state.conversations
     except Exception:
         pass
-    return []
- 
+    return st.session_state.conversations
+
 def create_conversation(title="Cuộc trò chuyện mới"):
     try:
         response = requests.post(f"{BACKEND_URL}/api/conversations?title={title}", timeout=2)
         if response.status_code == 200:
-            return response.json()
+            conv = response.json()
+            get_conversations()
+            return conv
     except Exception as e:
         st.error(f"Lỗi tạo cuộc trò chuyện: {e}")
     return None
- 
+
 def get_messages(conv_id):
     try:
         response = requests.get(f"{BACKEND_URL}/api/conversations/{conv_id}/messages", timeout=2)
@@ -64,21 +157,27 @@ def get_messages(conv_id):
     except Exception:
         pass
     return []
- 
+
 def delete_conversation(conv_id):
     try:
         response = requests.delete(f"{BACKEND_URL}/api/conversations/{conv_id}", timeout=2)
-        return response.status_code == 200
+        if response.status_code == 200:
+            get_conversations()
+            return True
     except Exception:
-        return False
- 
+        pass
+    return False
+
 def clear_all_conversations():
     try:
         response = requests.delete(f"{BACKEND_URL}/api/conversations", timeout=2)
-        return response.status_code == 200
+        if response.status_code == 200:
+            get_conversations()
+            return True
     except Exception:
-        return False
- 
+        pass
+    return False
+
 def get_documents():
     try:
         response = requests.get(f"{BACKEND_URL}/api/documents", timeout=2)
@@ -87,243 +186,321 @@ def get_documents():
     except Exception:
         pass
     return []
- 
+
 def upload_document(uploaded_file):
     try:
         files = {"file": (uploaded_file.name, uploaded_file.getvalue(), uploaded_file.type)}
-        response = requests.post(f"{BACKEND_URL}/api/upload", files=files, timeout=30)
+        response = requests.post(f"{BACKEND_URL}/api/upload", files=files, timeout=45)
         return response.status_code == 200, response.json()
     except Exception as e:
         return False, {"detail": str(e)}
- 
+
 def delete_document(file_name):
     try:
         response = requests.delete(f"{BACKEND_URL}/api/documents/{file_name}", timeout=5)
         return response.status_code == 200
     except Exception:
         return False
- 
+
+def format_size(bytes_size):
+    for unit in ['B', 'KB', 'MB', 'GB']:
+        if bytes_size < 1024:
+            return f"{bytes_size:.1f} {unit}"
+        bytes_size /= 1024
+    return f"{bytes_size:.1f} TB"
+
+# --- RENDER SOURCES COMPONENT ---
 def render_sources(sources):
-    """Helper dùng chung để hiển thị nguồn tham khảo"""
     if not sources:
         return
-    with st.expander("📄 Nguồn tham khảo"):
-        for i, src in enumerate(sources, 1):
-            page_info = f"trang {src['page']}" if src.get("page") else ""
-            score_info = f"độ trùng khớp: {src['score']:.2f}" if src.get("score") else ""
-            details = ", ".join([f for f in [page_info, score_info] if f])
-            st.write(f"**[{i}]** {src['file_name']} *({details})*")
- 
-# --- GIAO DIỆN CHÍNH ---
-st.title("RAG Chatbot")
-st.caption("Giao diện Streamlit tương tác với FastAPI RAG Backend")
- 
+    
+    source_items = []
+    for i, src in enumerate(sources, 1):
+        page_info = f"trang {src['page']}" if src.get("page") else ""
+        score_info = f"độ chính xác: {src['score']:.2f}" if src.get("score") else ""
+        details = ", ".join([f for f in [page_info, score_info] if f])
+        details_str = f" ({details})" if details else ""
+        source_items.append(f"**[{i}]** {src['file_name']}{details_str}")
+        
+    sources_html = "\n\n".join(source_items)
+    with st.expander("📄 Nguồn trích dẫn"):
+        st.markdown(sources_html)
+
+
+# --- APP STATE HANDLERS ---
+def handle_select_conversation(conv_id):
+    st.session_state.current_conv_id = conv_id
+    st.session_state.messages = get_messages(conv_id)
+
+def handle_create_conversation():
+    new_conv = create_conversation()
+    if new_conv:
+        handle_select_conversation(new_conv["id"])
+
+
+# --- MAIN LAYOUT SETUP ---
 backend_ok, health_data = check_backend_health()
- 
-# --- SIDEBAR ---
+conversations = get_conversations()
+
+# Check if selected conversation still exists
+if st.session_state.current_conv_id and not any(c["id"] == st.session_state.current_conv_id for c in conversations):
+    st.session_state.current_conv_id = None
+    st.session_state.messages = []
+
+# Sidebar implementation
 with st.sidebar:
-    st.header("Trạng thái Server")
+    st.markdown("<h2 style='margin-top:0;'>🤖 RAG Chatbot v2</h2>", unsafe_allow_html=True)
+    st.markdown("---")
+    
+    # Health Status
+    st.markdown("### Trạng thái hệ thống")
     if backend_ok:
         provider = health_data.get('provider', '').upper()
         model_name = health_data.get('model', 'N/A')
         st.markdown(f"""
-        <div style="
-            border: 1px solid #e2e8f0;
-            border-radius: 8px;
-            padding: 10px;
-            background-color: #ffffff;
-            margin-bottom: 15px;
-        ">
-            <div style="display: flex; align-items: center; gap: 8px; font-weight: 600; color: #0f172a; font-size: 14px;">
-                <span style="color: #10b981; font-size: 12px;">🟢</span> Kết nối thành công
-            </div>
-            <div style="margin-top: 6px; font-size: 12px; color: #64748b;">
-                <strong>Provider:</strong> {provider}
-            </div>
-            <div style="margin-top: 2px; font-size: 12px; color: #64748b;">
-                <strong>Model:</strong> <code style="background-color: #f1f5f9; padding: 2px 4px; border-radius: 4px; font-family: monospace;">{model_name}</code>
-            </div>
+        <div class="status-badge status-online">🟢 Trực tuyến</div>
+        <div style="font-size:12.5px; color:#64748b; margin-top:8px; line-height:1.4;">
+            <b>Provider:</b> {provider}<br/>
+            <b>Model:</b> <code style="font-size:11px; padding:1px 3px; background:#f1f5f9; border-radius:3px;">{model_name}</code>
         </div>
         """, unsafe_allow_html=True)
     else:
-        col_err, col_btn = st.columns([3, 2], vertical_alignment="center")
-        with col_err:
-            st.error("⚠️ Ngoại tuyến")
-        with col_btn:
-            if st.button("🔄 Thử lại", use_container_width=True):
-                st.rerun()
- 
-    st.markdown("---")
- 
-    st.header("Lịch sử trò chuyện")
- 
-    if st.button("Cuộc trò chuyện mới", use_container_width=True):
-        new_conv = create_conversation()
-        if new_conv:
-            st.session_state.current_conv_id = new_conv["id"]
-            st.session_state.current_sources = []
+        st.markdown("""
+        <div class="status-badge status-offline">🔴 Ngoại tuyến</div>
+        <div style="font-size:12.5px; color:#64748b; margin-top:8px;">
+            Không tìm thấy kết nối tới API Server.
+        </div>
+        """, unsafe_allow_html=True)
+        if st.button("🔄 Thử kết nối lại", use_container_width=True):
             st.rerun()
- 
-    convs = get_conversations()
-    if convs:
-        conv_titles = {c["id"]: c["title"] for c in convs}
- 
-        if st.session_state.current_conv_id not in conv_titles:
-            st.session_state.current_conv_id = convs[0]["id"]
- 
-        for c in convs:
+
+    st.markdown("---")
+    
+    # Conversations section
+    st.markdown("### Lịch sử trò chuyện")
+    if st.button("➕ Cuộc trò chuyện mới", use_container_width=True, type="primary"):
+        handle_create_conversation()
+        st.rerun()
+        
+    st.markdown("<div style='height: 8px;'></div>", unsafe_allow_html=True)
+    
+    if conversations:
+        for c in conversations:
             c_id = c["id"]
             c_title = c["title"]
             is_active = (c_id == st.session_state.current_conv_id)
             
-            label = c_title
+            button_label = f"💬 {c_title}"
             if is_active:
-                label = f"▸ {c_title}"
-                
-            col1, col2 = st.columns([5, 1], vertical_alignment="center")
-            with col1:
-                if st.button(label, key=f"select_{c_id}", use_container_width=True):
-                    st.session_state.current_conv_id = c_id
-                    st.session_state.current_sources = []
+                button_label = f"👉 {c_title}"
+            
+            col_btn, col_opt = st.columns([5, 1], vertical_alignment="center")
+            with col_btn:
+                # Selecting chat
+                if st.button(button_label, key=f"sel_{c_id}", use_container_width=True, 
+                             type="secondary" if not is_active else "primary"):
+                    handle_select_conversation(c_id)
                     st.rerun()
-            with col2:
-                with st.popover("⋮", help="Tùy chọn"):
-                    if st.button("🗑️ Xóa", key=f"del_{c_id}", type="primary", use_container_width=True):
+            with col_opt:
+                with st.popover("⋮", help="Hành động"):
+                    if st.button("🗑️ Xóa", key=f"del_conv_{c_id}", type="primary", use_container_width=True):
                         if delete_conversation(c_id):
                             if st.session_state.current_conv_id == c_id:
                                 st.session_state.current_conv_id = None
-                            st.session_state.current_sources = []
+                                st.session_state.messages = []
                             st.rerun()
- 
-        if st.button("Xóa toàn bộ lịch sử", type="secondary", use_container_width=True):
+        
+        st.markdown("<div style='height: 15px;'></div>", unsafe_allow_html=True)
+        if st.button("🗑️ Xóa toàn bộ lịch sử", type="secondary", use_container_width=True):
             if clear_all_conversations():
                 st.session_state.current_conv_id = None
-                st.session_state.current_sources = []
+                st.session_state.messages = []
                 st.rerun()
     else:
         st.info("Chưa có cuộc trò chuyện nào.")
- 
-    st.markdown("---")
- 
-    st.header("Quản lý tài liệu")
- 
-    uploaded_file = st.file_uploader(
-        "Tải lên tài liệu mới (PDF/TXT/DOCX/MD/CSV):",
-        type=["pdf", "txt", "docx", "md", "csv"]
-    )
-    if uploaded_file is not None:
-        with st.spinner("Đang nạp và xử lý tài liệu..."):
-            success, res = upload_document(uploaded_file)
-            if success:
-                st.success(f"Nạp thành công: {uploaded_file.name} ({res.get('chunks_created', 0)} chunks)", icon="✅")
-                time.sleep(1.5)
-                st.rerun()
-            else:
-                st.error(f"Lỗi khi nạp: {res.get('detail', 'Unknown error')}", icon="⚠️")
- 
-    docs = get_documents()
-    if docs:
-        st.write(f"Đang có {len(docs)} tài liệu trong database:")
-        for doc in docs:
-            col1, col2 = st.columns([4, 1]) 
-            col1.caption(f"📄 {doc}")
-            if col2.button("❌", key=f"del_{doc}"):
-                if delete_document(doc):
-                    st.success(f"Đã xóa {doc}", icon="✅")
-                    time.sleep(1)
-                    st.rerun()
-    else:
-        st.caption("Chưa có tài liệu nào trong database.")
- 
-# --- KHU VỰC CHAT ---
- 
+
+
+# --- MAIN SCREEN ---
 if not st.session_state.current_conv_id:
-    st.info("Vui lòng chọn một cuộc trò chuyện từ lịch sử hoặc nhấn nút **'➕ Cuộc trò chuyện mới'** ở cột bên trái để bắt đầu chat.")
-    with st.expander("💡 Quy trình RAG Pipeline v2 hoạt động như thế nào?"):
-        st.write("""
-        Hệ thống sử dụng quy trình **9 bước nâng cấp**:
-        1. **Đọc tài liệu (Load)**: Hỗ trợ PDF, TXT, DOCX, MD, CSV.
-        2. **Làm sạch (Clean)**: Chuẩn hóa unicode và loại bỏ ký tự lạ.
-        3. **Chia chunk (Chunk)**: Chiến lược phân đoạn ngữ nghĩa (Semantic Chunking).
-        4. **Embed**: Nhúng chunk văn bản thành vector.
-        5. **Lưu trữ (Store)**: Lưu vector vào ChromaDB.
-        6. **Nhúng truy vấn**: Nhúng câu hỏi của bạn thành vector.
-        7. **Tìm kiếm (Retrieve)**: Lấy ra các chunk có nội dung tương đồng.
-        8. **Sắp xếp lại (Rerank)**: Cross-Encoder chọn 3 nguồn tốt nhất.
-        9. **Trả lời (Generation)**: Tổng hợp câu trả lời kèm trích nguồn.
-        """)
- 
+    # LANDING PAGE when no chat selected
+    st.markdown("<h1 style='text-align: center; margin-top: 50px; font-size: 3rem;'>🤖 Trợ lý thông minh RAG v2</h1>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; font-size: 1.2rem; color: #64748b;'>Hệ thống hỏi đáp tài liệu thông minh sử dụng trí tuệ nhân tạo</p>", unsafe_allow_html=True)
+    
+    st.markdown("<div style='height: 40px;'></div>", unsafe_allow_html=True)
+    
+    col_feat1, col_feat2, col_feat3 = st.columns(3)
+    with col_feat1:
+        st.markdown("""
+        <div class="premium-card">
+            <h3>📂 Hỗ trợ đa dạng</h3>
+            <p style="font-size: 14px; color:#475569;">Nạp các tài liệu PDF, DOCX, TXT, MD, CSV và cả tệp Excel (.xlsx) cực kì nhanh chóng.</p>
+        </div>
+        """, unsafe_allow_html=True)
+    with col_feat2:
+        st.markdown("""
+        <div class="premium-card">
+            <h3>⚡ Tìm kiếm ngữ nghĩa lai</h3>
+            <p style="font-size: 14px; color:#475569;">Sử dụng Vector Embedding để tìm kiếm các văn bản liên quan kết hợp với Cross-Encoder Reranker lọc ra nguồn tin cậy.</p>
+        </div>
+        """, unsafe_allow_html=True)
+    with col_feat3:
+        st.markdown("""
+        <div class="premium-card">
+            <h3>💬 Stream trả lời tức thì</h3>
+            <p style="font-size: 14px; color:#475569;">Trải nghiệm tốc độ sinh câu trả lời từng từ một theo thời gian thực (Stream Response) kèm trích nguồn chi tiết.</p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+    st.markdown("<div style='height: 30px;'></div>", unsafe_allow_html=True)
+    st.info("💡 Vui lòng bấm vào nút **'➕ Cuộc trò chuyện mới'** ở góc trái để bắt đầu hỏi đáp tài liệu.")
+    
 else:
-    # ✅ FIX 4: Lấy messages TRƯỚC khi render chat_input
-    messages = get_messages(st.session_state.current_conv_id)
- 
-    # ✅ FIX 5: Nhận input TRƯỚC khi render lịch sử
-    # Đây là fix cốt lõi — chat_input phải được gọi trước st.chat_message loop
-    query = st.chat_input("Nhập câu hỏi của bạn ở đây...")
- 
-    # Render lịch sử chat
-    for msg in messages:
-        role = "user" if msg["role"] == "user" else "assistant"
-        avatar = "🧑‍💻" if role == "user" else "🤖"
-        with st.chat_message(role, avatar=avatar):
-            st.markdown(msg["content"])
-            sources = (
-                json.loads(msg["sources"])
-                if isinstance(msg.get("sources"), str)
-                else msg.get("sources", [])
-            )
-            if role == "assistant":
-                render_sources(sources)
- 
-    # Xử lý câu hỏi mới
-    if query:
-        # Hiển thị message user ngay lập tức
-        with st.chat_message("user", avatar="🧑‍💻"):
-            st.markdown(query)
- 
-        # Stream phản hồi assistant
-        with st.chat_message("assistant", avatar="🤖"):
-            response_placeholder = st.empty()
-            full_response = ""
-            st.session_state.current_sources = []
- 
-            try:
-                response = requests.post(
-                    f"{BACKEND_URL}/api/chat/stream",
-                    json={
-                        "query": query,
-                        "conversation_id": st.session_state.current_conv_id
-                    },
-                    stream=True,
-                    timeout=60
-                )
- 
-                for line in response.iter_lines():
-                    if line:
-                        line_decoded = line.decode("utf-8").strip()
-                        if line_decoded.startswith("data: "):
-                            event_data = line_decoded[6:]
-                            try:
-                                event = json.loads(event_data)
-                                if event["type"] == "token":
-                                    full_response += event["data"]
-                                    response_placeholder.markdown(full_response + "▌")
-                                elif event["type"] == "sources":
-                                    st.session_state.current_sources = event["data"]
-                                elif event["type"] == "conv_id":
-                                    st.session_state.current_conv_id = event["data"]
-                            except Exception:
-                                pass
- 
-            except Exception as e:
-                full_response += f"\n\nLỗi kết nối Server: {e}"
- 
-            # Render câu trả lời hoàn chỉnh (bỏ cursor ▌)
-            response_placeholder.markdown(full_response)
- 
-            # Hiển thị nguồn của câu hỏi vừa hỏi
-            render_sources(st.session_state.current_sources)
-         # Đặt flag → Streamlit rerun tự nhiên sau khi render xong → flag kích hoạt rerun thứ 2 để đồng bộ DB
-        st.session_state.stream_done = True
-        st.rerun()
- 
+    # CHAT & DOC MANAGEMENT TABS
+    tab_chat, tab_docs = st.tabs(["💬 Trò chuyện", "📂 Quản lý tài liệu"])
+    
+    # ── TAB 1: CHAT INTERACTION ──────────────────────────────────────
+    with tab_chat:
+        # Render message history
+        for msg in st.session_state.messages:
+            role = "user" if msg["role"] == "user" else "assistant"
+            avatar = "🧑‍💻" if role == "user" else "🤖"
+            with st.chat_message(role, avatar=avatar):
+                st.markdown(msg["content"])
+                
+                # Check for sources
+                sources = msg.get("sources", [])
+                if isinstance(sources, str):
+                    try:
+                        sources = json.loads(sources)
+                    except Exception:
+                        sources = []
+                        
+                if role == "assistant" and sources:
+                    render_sources(sources)
+
+        # Handle user chat input
+        query = st.chat_input("Nhập câu hỏi của bạn tại đây...")
+        
+        if query:
+            # Append User message to Session State & Display instantly
+            st.session_state.messages.append({"role": "user", "content": query})
+            with st.chat_message("user", avatar="🧑‍💻"):
+                st.markdown(query)
+            
+            # Display Assistant typing placeholder
+            with st.chat_message("assistant", avatar="🤖"):
+                response_placeholder = st.empty()
+                full_response = ""
+                sources_list = []
+                
+                try:
+                    # Stream call from backend
+                    response = requests.post(
+                        f"{BACKEND_URL}/api/chat/stream",
+                        json={
+                            "query": query,
+                            "conversation_id": st.session_state.current_conv_id
+                        },
+                        stream=True,
+                        timeout=60
+                    )
+                    
+                    for line in response.iter_lines():
+                        if line:
+                            line_decoded = line.decode("utf-8").strip()
+                            if line_decoded.startswith("data: "):
+                                event_data = line_decoded[6:]
+                                try:
+                                    event = json.loads(event_data)
+                                    if event["type"] == "token":
+                                        full_response += event["data"]
+                                        response_placeholder.markdown(full_response + "▌")
+                                    elif event["type"] == "sources":
+                                        sources_list = event["data"]
+                                    elif event["type"] == "conv_id":
+                                        st.session_state.current_conv_id = event["data"]
+                                except Exception:
+                                    pass
+                                    
+                    # Display final complete response without cursor
+                    response_placeholder.markdown(full_response)
+                    if sources_list:
+                        render_sources(sources_list)
+                    
+                    # Update local state so page redraws correctly on state events
+                    st.session_state.messages.append({
+                        "role": "assistant",
+                        "content": full_response,
+                        "sources": sources_list
+                    })
+                    
+                except Exception as e:
+                    error_msg = f"⚠️ Lỗi kết nối API Server: {e}"
+                    response_placeholder.error(error_msg)
+                    st.session_state.messages.append({
+                        "role": "assistant",
+                        "content": error_msg,
+                        "sources": []
+                    })
+                    
+                # Smooth update without forced double-rerun
+                st.rerun()
+
+    # ── TAB 2: DOCUMENT MANAGEMENT ───────────────────────────────────
+    with tab_docs:
+        st.markdown("### 📂 Quản lý kho tài liệu RAG")
+        st.caption("Các tệp tài liệu được tải lên sẽ được chuyển đổi thành vector nhúng ngữ nghĩa và lưu trữ trong cơ sở dữ liệu.")
+        st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
+        
+        # Upload area
+        uploaded_file = st.file_uploader(
+            "Tải lên tệp tài liệu mới (Hỗ trợ: PDF, TXT, DOCX, MD, CSV, XLSX):",
+            type=["pdf", "txt", "docx", "md", "csv", "xlsx"]
+        )
+        
+        if uploaded_file is not None:
+            with st.spinner("Đang nạp, xử lý và trích xuất vector tài liệu..."):
+                success, res = upload_document(uploaded_file)
+                if success:
+                    st.success(f"Nạp thành công: **{uploaded_file.name}** ({res.get('chunks_created', 0)} chunks được lưu trữ)", icon="✅")
+                    time.sleep(1.5)
+                    st.rerun()
+                else:
+                    st.error(f"Lỗi khi nạp tài liệu: {res.get('detail', 'Unknown error')}", icon="⚠️")
+                    
+        st.markdown("---")
+        st.markdown("#### Danh sách tài liệu hiện có trong Database")
+        
+        docs = get_documents()
+        if docs:
+            # Render custom styled list
+            for doc in docs:
+                doc_name = doc.get("file_name", "")
+                doc_size = format_size(doc.get("file_size", 0))
+                doc_type = doc.get("file_type", "").upper()
+                
+                st.markdown(f"""
+                <div class="file-item">
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <span style="font-size: 24px;">📄</span>
+                        <div>
+                            <b style="color: #0f172a; font-size:14.5px;">{doc_name}</b><br/>
+                            <span style="font-size: 12px; color: #64748b;">Kích thước: {doc_size} | Định dạng: {doc_type}</span>
+                        </div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                # Delete button placed correctly below or aligned
+                col_info, col_del = st.columns([6, 1])
+                with col_del:
+                    if st.button("🗑️ Xóa tệp", key=f"del_doc_{doc_name}", use_container_width=True, type="secondary"):
+                        with st.spinner(f"Đang xóa {doc_name}..."):
+                            if delete_document(doc_name):
+                                st.success(f"Đã xóa {doc_name}!")
+                                time.sleep(1.2)
+                                st.rerun()
+                            else:
+                                st.error("Lỗi khi xóa tài liệu.")
+        else:
+            st.info("Hiện chưa có tài liệu nào trong Vector Database. Vui lòng tải tài liệu lên ở mục trên.")

@@ -108,23 +108,29 @@ async def chat_stream(request: ChatRequest, engine=Depends(get_rag)):
     full_answer = []
 
     async def generate():
+        sources_list = []
         async for chunk in engine.chat_stream(
             query=request.query, conversation_history=history_fmt,
             top_k=request.top_k, threshold=request.threshold
         ):
-            if '"type": "token"' in chunk:
+            if chunk.startswith("data: "):
                 try:
-                    data = json.loads(chunk.replace("data: ", "").strip())
-                    full_answer.append(data.get("data", ""))
-                except Exception:
-                    pass
+                    clean_chunk = chunk[6:].strip()
+                    if clean_chunk:
+                        data = json.loads(clean_chunk)
+                        if data.get("type") == "token":
+                            full_answer.append(data.get("data", ""))
+                        elif data.get("type") == "sources":
+                            sources_list = data.get("data", [])
+                except Exception as e:
+                    logger.error(f"Lỗi parse stream chunk: {e}")
             # Also send conv_id on first event
             yield chunk
 
         # Save assistant reply
         answer_text = "".join(full_answer)
         if answer_text:
-            ch.add_message(conv_id, "assistant", answer_text, provider=engine.provider)
+            ch.add_message(conv_id, "assistant", answer_text, sources=sources_list, provider=engine.provider)
         
         # Auto-title nếu là tin đầu tiên
         msgs = ch.get_messages(conv_id)
